@@ -47,7 +47,7 @@ class ActiveRecord::Base
     def clone_with_deep_cloning(options = {})
       dict = options[:dictionary]
       dict ||= {} if options.delete(:use_dictionary)
-      
+
       kopy = unless dict
         clone_without_deep_cloning
       else
@@ -80,26 +80,26 @@ class ActiveRecord::Base
           association_reflection = self.class.reflect_on_association(association)
           raise AssociationNotFoundException.new("#{self.class}##{association}") if association_reflection.nil?
 
-          cloned_object = case association_reflection.macro
-            when :belongs_to, :has_one
-              self.send(association) && self.send(association).clone(opts)
-            when :has_many, :has_and_belongs_to_many
-              reverse_association_name = association_reflection.klass.reflect_on_all_associations.detect do |a| 
-                a.primary_key_name.to_s == association_reflection.primary_key_name.to_s
-              end.try(:name)
-              
-              self.send(association).collect do |obj| 
-                tmp = obj.clone(opts)
-                tmp.send("#{association_reflection.primary_key_name.to_s}=", nil)                
-                tmp.send("#{reverse_association_name.to_s}=", kopy) if reverse_association_name
-                tmp
-              end
+          case association_reflection.macro
+          when :belongs_to, :has_one
+            clone = self.send(association) && self.send(association).clone(opts)
+            kopy.send("build_#{association}", clone.attributes) if clone
+          when :has_many, :has_and_belongs_to_many
+            reverse_association_name = association_reflection.klass.reflect_on_all_associations.detect do |a|
+              a.primary_key_name.to_s == association_reflection.primary_key_name.to_s
+            end.try(:name)
+
+            self.send(association).each do |obj|
+              tmp = obj.clone(opts)
+              tmp.send("#{association_reflection.primary_key_name.to_s}=", nil)
+              tmp.send("#{reverse_association_name.to_s}=", kopy) if reverse_association_name
+              kopy.send("#{association}").send(:<<, tmp)
             end
-          kopy.send("#{association}=", cloned_object)
+          end
         end
       end
 
-      return kopy
+      kopy
     end
 
     class AssociationNotFoundException < StandardError; end    
